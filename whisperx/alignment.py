@@ -13,9 +13,9 @@ import torch
 import torchaudio
 from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
 
-from .audio import SAMPLE_RATE, load_audio
-from .utils import interpolate_nans
-from .types import (
+from whisperx.audio import SAMPLE_RATE, load_audio
+from whisperx.utils import interpolate_nans
+from whisperx.types import (
     AlignedTranscriptionResult,
     SingleSegment,
     SingleAlignedSegment,
@@ -70,6 +70,7 @@ DEFAULT_ALIGN_MODELS_HF = {
     "gl": "ifrz/wav2vec2-large-xlsr-galician",
     "ka": "xsway/wav2vec2-large-xlsr-georgian",
     "lv": "jimregan/wav2vec2-large-xlsr-latvian-cv",
+    "tl": "Khalsuu/filipino-wav2vec2-l-xls-r-300m-official",
 }
 
 
@@ -423,7 +424,7 @@ def get_wildcard_emission(frame_emission, tokens, blank_id):
     wildcard_mask = (tokens == -1)
 
     # Get scores for non-wildcard positions
-    regular_scores = frame_emission[tokens.clamp(min=0)]  # clamp to avoid -1 index
+    regular_scores = frame_emission[tokens.clamp(min=0).long()]  # clamp to avoid -1 index
 
     # Create a mask and compute the maximum value without modifying frame_emission
     max_valid_score = frame_emission.clone()   # Create a copy
