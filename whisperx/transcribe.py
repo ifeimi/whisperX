@@ -10,8 +10,11 @@ from whisperx.alignment import align, load_align_model
 from whisperx.asr import load_model
 from whisperx.audio import load_audio
 from whisperx.diarize import DiarizationPipeline, assign_word_speakers
-from whisperx.types import AlignedTranscriptionResult, TranscriptionResult
+from whisperx.schema import AlignedTranscriptionResult, TranscriptionResult
 from whisperx.utils import LANGUAGES, TO_LANGUAGE_CODE, get_writer
+from whisperx.log_utils import get_logger
+
+logger = get_logger(__name__)
 
 
 def transcribe_task(args: dict, parser: argparse.ArgumentParser):
@@ -57,7 +60,12 @@ def transcribe_task(args: dict, parser: argparse.ArgumentParser):
     diarize: bool = args.pop("diarize")
     min_speakers: int = args.pop("min_speakers")
     max_speakers: int = args.pop("max_speakers")
+    diarize_model_name: str = args.pop("diarize_model")
     print_progress: bool = args.pop("print_progress")
+    return_speaker_embeddings: bool = args.pop("speaker_embeddings")
+
+    if return_speaker_embeddings and not diarize:
+        warnings.warn("--speaker_embeddings has no effect without --diarize")
 
     if args["language"] is not None:
         args["language"] = args["language"].lower()
@@ -114,7 +122,6 @@ def transcribe_task(args: dict, parser: argparse.ArgumentParser):
 
     # Part 1: VAD & ASR Loop
     results = []
-    tmp_results = []
     # model = load_model(model_name, device=device, download_root=model_dir)
     model = load_model(
         model_name,
@@ -138,7 +145,7 @@ def transcribe_task(args: dict, parser: argparse.ArgumentParser):
     for audio_path in args.pop("audio"):
         audio = load_audio(audio_path)
         # >> VAD & ASR
-        print(">>Performing transcription...")
+        logger.info("Performing transcription...")
         result: TranscriptionResult = model.transcribe(
             audio,
             batch_size=batch_size,
@@ -171,13 +178,13 @@ def transcribe_task(args: dict, parser: argparse.ArgumentParser):
             if align_model is not None and len(result["segments"]) > 0:
                 if result.get("language", "en") != align_metadata["language"]:
                     # load new language
-                    print(
+                    logger.info(
                         f"New language found ({result['language']})! Previous was ({align_metadata['language']}), loading new alignment model for new language..."
                     )
                     align_model, align_metadata = load_align_model(
                         result["language"], device
                     )
-                print(">>Performing alignment...")
+                logger.info("Performing alignment...")
                 result: AlignedTranscriptionResult = align(
                     result["segments"],
                     align_model,
@@ -199,18 +206,29 @@ def transcribe_task(args: dict, parser: argparse.ArgumentParser):
     # >> Diarize
     if diarize:
         if hf_token is None:
-            print(
-                "Warning, no --hf_token used, needs to be saved in environment variable, otherwise will throw error loading diarization model..."
+            logger.warning(
+                "No --hf_token provided, needs to be saved in environment variable, otherwise will throw error loading diarization model"
             )
         tmp_results = results
-        print(">>Performing diarization...")
+        logger.info("Performing diarization...")
+        logger.info(f"Using model: {diarize_model_name}")
         results = []
-        diarize_model = DiarizationPipeline(use_auth_token=hf_token, device=device)
+        diarize_model = DiarizationPipeline(model_name=diarize_model_name, use_auth_token=hf_token, device=device)
         for result, input_audio_path in tmp_results:
-            diarize_segments = diarize_model(
-                input_audio_path, min_speakers=min_speakers, max_speakers=max_speakers
+            diarize_result = diarize_model(
+                input_audio_path, 
+                min_speakers=min_speakers, 
+                max_speakers=max_speakers, 
+                return_embeddings=return_speaker_embeddings
             )
-            result = assign_word_speakers(diarize_segments, result)
+
+            if return_speaker_embeddings:
+                diarize_segments, speaker_embeddings = diarize_result
+            else:
+                diarize_segments = diarize_result
+                speaker_embeddings = None
+
+            result = assign_word_speakers(diarize_segments, result, speaker_embeddings)
             results.append((result, input_audio_path))
     # >> Write
     for result, audio_path in results:

@@ -1,5 +1,10 @@
 <h1 align="center">WhisperX</h1>
 
+## Recall.ai - Meeting Transcription API
+
+If you’re looking for a transcription API for meetings, consider checking out [Recall.ai's Meeting Transcription API](https://www.recall.ai/product/meeting-transcription-api?utm_source=github&utm_medium=sponsorship&utm_campaign=mbain-whisperx), an API that works with Zoom, Google Meet, Microsoft Teams, and more. Recall.ai diarizes by pulling the speaker data and separate audio streams from the meeting platforms, which means 100% accurate speaker diarization with actual speaker names.
+
+
 <p align="center">
   <a href="https://github.com/m-bain/whisperX/stargazers">
     <img src="https://img.shields.io/github/stars/m-bain/whisperX.svg?colorA=orange&colorB=orange&logo=github"
@@ -56,6 +61,15 @@ This repository provides fast automatic speech recognition (70x realtime with la
 - Paper drop🎓👨‍🏫! Please see our [ArxiV preprint](https://arxiv.org/abs/2303.00747) for benchmarking and details of WhisperX. We also introduce more efficient batch inference resulting in large-v2 with \*60-70x REAL TIME speed.
 
 <h2 align="left" id="setup">Setup ⚙️</h2>
+
+### 0. CUDA Installation
+
+To use WhisperX with GPU acceleration, install the CUDA toolkit 12.8 before WhisperX. Skip this step if using only the CPU.
+
+- For **Linux** users, install the CUDA toolkit 12.8 following this guide:
+  [CUDA Installation Guide for Linux](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/).
+- For **Windows** users, download and install the CUDA toolkit 12.8:
+  [CUDA Downloads](https://developer.nvidia.com/cuda-12-8-1-download-archive).
 
 ### 1. Simple Installation (Recommended)
 
@@ -130,7 +144,7 @@ To label the transcript with speaker ID's (set number of speakers if known e.g. 
 
 To run on CPU instead of GPU (and for running on Mac OS X):
 
-    whisperx path/to/audio.wav --compute_type int8
+    whisperx path/to/audio.wav --compute_type int8 --device cpu
 
 ### Other languages
 
@@ -152,6 +166,7 @@ See more examples in other languages [here](EXAMPLES.md).
 ```python
 import whisperx
 import gc
+from whisperx.diarize import DiarizationPipeline
 
 device = "cuda"
 audio_file = "audio.mp3"
@@ -170,7 +185,7 @@ result = model.transcribe(audio, batch_size=batch_size)
 print(result["segments"]) # before alignment
 
 # delete model if low on GPU resources
-# import gc; gc.collect(); torch.cuda.empty_cache(); del model
+# import gc; import torch; gc.collect(); torch.cuda.empty_cache(); del model
 
 # 2. Align whisper output
 model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=device)
@@ -179,10 +194,10 @@ result = whisperx.align(result["segments"], model_a, metadata, audio, device, re
 print(result["segments"]) # after alignment
 
 # delete model if low on GPU resources
-# import gc; gc.collect(); torch.cuda.empty_cache(); del model_a
+# import gc; import torch; gc.collect(); torch.cuda.empty_cache(); del model_a
 
 # 3. Assign speaker labels
-diarize_model = whisperx.diarize.DiarizationPipeline(use_auth_token=YOUR_HF_TOKEN, device=device)
+diarize_model = DiarizationPipeline(use_auth_token=YOUR_HF_TOKEN, device=device)
 
 # add min/max number of speakers if known
 diarize_segments = diarize_model(audio)
